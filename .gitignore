@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+out/
+
+# Engines only work on the device that built them: build your own (exercise 2, model_zoo/jetson/build_engines.py)
+exercises/*.engine
+solutions/*.engine
+model_zoo/engines/
+
+# Pictures and videos the exercises write next to themselves
+exercises/ex*.jpg
+solutions/ex*.jpg
+exercises/*.mp4
+solutions/*.mp4

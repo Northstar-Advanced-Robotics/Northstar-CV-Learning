@@ -1,0 +1,17 @@
+# The camera that recorded videos/demo.avi: a HikRobot industrial camera.
+# Same format as the robot's config files, so the same tools read both:
+#   python3 shared/cameras.py --source config:configs/demo_camera.yaml   (opens a camera with these settings)
+#   python3 ex7_pnp.py --calib ../configs/demo_camera.yaml               (uses camera_matrix + distort_coeffs)
+# Copied from configs/demo.yaml in the robot's code (Northstar-sp_vision_25).
+
+camera_name: "hikrobot"   # which kind of camera: hikrobot, mindvision or usb
+exposure_ms: 2            # how long each picture collects light, in milliseconds. Short = dark but sharp
+gain: 16                  # brightness boost after the picture is taken (more gain = brighter but noisier)
+
+# Calibration: measured once per camera + lens (see BASICS.md, "Camera calibration").
+# camera_matrix = [fx, 0, cx, 0, fy, cy, 0, 0, 1]
+#   fx, fy: the focal length, in pixels (how much the lens zooms)
+#   cx, cy: the pixel the lens's center points at (near the middle of the 1440x1080 picture)
+camera_matrix: [1818.3669452465165, 0, 751.06226574703498, 0, 1822.494494078506, 530.43671556112133, 0, 0, 1]
+# distort_coeffs: how much the lens bends straight lines (5 numbers, OpenCV's standard model)
+distort_coeffs: [-0.077944626599568856, 0.15447826031486889, -0.0025714394278524674, 0.00083016311301273629, 0]

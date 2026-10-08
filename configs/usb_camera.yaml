@@ -1,0 +1,16 @@
+# An example USB camera. Copy this file, change the numbers for your camera, then:
+#   python3 shared/cameras.py --source config:configs/usb_camera.yaml
+# Same format as the robot's config files (configs/camera.yaml in Northstar-sp_vision_25).
+# USB cameras use their own units for exposure, gain and gamma: try values and look at the preview.
+
+camera_name: "usb"
+usb_device: "video0"      # Linux: /dev/video0. On Windows, use --source usb:0 instead of a config file
+image_width: 1920         # the picture size to ask for (the camera may give you something else)
+image_height: 1200
+usb_frame_rate: 50        # pictures per second to ask for
+usb_exposure: 250         # how long each picture collects light (driver units, often 1-80000)
+usb_gamma: 160            # brightness curve
+usb_gain: 10              # brightness boost (driver units, often 0-96)
+
+# No camera_matrix / distort_coeffs yet: calibrate this camera first (BASICS.md, "Camera calibration"),
+# then add them here like in demo_camera.yaml.

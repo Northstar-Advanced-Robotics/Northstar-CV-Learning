@@ -1,0 +1,11 @@
+# Model files and videos are data: git must never change their line endings or try to diff them.
+# OpenVINO .xml and NCNN .param files ARE text, but they have to stay byte-for-byte what their authors
+# published (models/README.md lists the original names and repos).
+*.onnx              binary
+*.bin               binary
+*.engine            binary
+*.pt                binary
+*.avi               binary
+*.mp4               binary
+models/**/*.xml     binary
+models/**/*.param   binary

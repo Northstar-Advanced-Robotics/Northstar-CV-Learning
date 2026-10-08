@@ -1,0 +1,9 @@
+# Laptop (Linux / Mac / Windows):  pip install -r requirements.txt
+# Jetson: install TensorRT + PyTorch as in ../README.md first, then this file without opencv-python
+# (keep the Jetson's system OpenCV).
+numpy
+opencv-python
+onnx
+onnxruntime
+openvino
+ncnn
