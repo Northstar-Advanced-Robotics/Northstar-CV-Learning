@@ -1,19 +1,6 @@
 """Exercise 2: load the TensorRT engine you built and run it from Python.
 
-Build the engine first with trtexec (README, exercise 2), then fill in TRTModel and run:
-    python3 ex2_load_engine.py
-
-Words you'll meet (BASICS.md, section 10, explains engines):
-    deserialize        turn the bytes of the .engine file back into an object you can use
-    execution context  the object that actually runs the engine; you tell it which memory to use
-    tensor             an input or output array, like the (1, 3, 640, 640) picture
-    buffer             a block of memory ON THE GPU. The GPU can't read numpy arrays (they live in
-                       the computer's normal memory), so every input and output needs a GPU buffer
-    plugin             an extra operation TensorRT doesn't have built in, like EfficientNMS_TRT
-
-Docs: https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/python-api-docs.html
-Use the TensorRT 10 functions (num_io_tensors, get_tensor_name, set_tensor_address,
-execute_async_v3). Many examples online use an OLD way ("bindings") that no longer exists.
+Build the engine first (see README, exercise 2), then run:  python3 ex2_load_engine.py
 """
 import time
 
@@ -24,10 +11,7 @@ import torch
 import checks
 import config
 
-# We use PyTorch (torch) only to get GPU memory: torch.empty(shape, dtype=..., device="cuda") gives
-# you a GPU buffer, .data_ptr() is its address (a number TensorRT needs), .copy_(x) copies data into
-# it, and .cpu().numpy() copies it back out as a numpy array.
-# TensorRT and torch name number types differently; this dict translates.
+# TensorRT data types -> torch data types (torch is only used to own the GPU memory)
 TRT_TO_TORCH = {
     trt.float32: torch.float32,
     trt.float16: torch.float16,
@@ -40,28 +24,39 @@ TRT_TO_TORCH = {
 
 class TRTModel:
     def __init__(self, engine_path):
-        # TODO
-        # 1. Make a trt.Logger (where TensorRT prints its messages) and register TensorRT's built-in
-        #    plugins with trt.init_libnvinfer_plugins(logger, ""). The engine contains EfficientNMS_TRT,
-        #    which is a plugin: what happens if you skip this?
-        # 2. Read the engine file's bytes (open(path, "rb").read()) and deserialize them with a
-        #    trt.Runtime: runtime.deserialize_cuda_engine(data)
-        # 3. Create an execution context: engine.create_execution_context()
-        # 4. For every input and output tensor: look up its name, shape and dtype (number type),
-        #    make a GPU buffer for it with torch, and tell the context that buffer's address.
-        #    Remember which tensors are inputs and which are outputs (engine.get_tensor_mode).
-        raise NotImplementedError
+        logger = trt.Logger(trt.Logger.WARNING)
+        # The engine contains the EfficientNMS_TRT plugin; it must be registered before loading
+        trt.init_libnvinfer_plugins(logger, "")
+        with open(engine_path, "rb") as f, trt.Runtime(logger) as runtime:
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        if self.engine is None:
+            raise RuntimeError(f"Could not load {engine_path}. Was it built on this device and TensorRT version?")
+        self.context = self.engine.create_execution_context()
+
+        # One GPU buffer per input/output tensor; tell TensorRT where each one lives
+        self.buffers, self.inputs, self.outputs = {}, [], []
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
+            shape = tuple(self.engine.get_tensor_shape(name))
+            dtype = TRT_TO_TORCH[self.engine.get_tensor_dtype(name)]
+            self.buffers[name] = torch.empty(shape, dtype=dtype, device="cuda")
+            self.context.set_tensor_address(name, self.buffers[name].data_ptr())
+            is_input = self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
+            (self.inputs if is_input else self.outputs).append(name)
+        self.stream = torch.cuda.current_stream().cuda_stream
 
     def io_info(self):
-        """Return a list of (name, "INPUT" or "OUTPUT", shape, dtype) for every tensor."""
-        # TODO
-        raise NotImplementedError
+        """List of (name, "INPUT"/"OUTPUT", shape, dtype) for every tensor."""
+        return [(n, self.engine.get_tensor_mode(n).name, tuple(self.buffers[n].shape), str(self.buffers[n].dtype))
+                for n in self.inputs + self.outputs]
 
     def __call__(self, tensor):
-        """tensor: (1, 3, 640, 640) float32 numpy array. Return {output_name: numpy array}."""
-        # TODO: copy the input into its GPU buffer, run the engine, wait until the GPU is done,
-        # then copy every output back into a numpy array
-        raise NotImplementedError
+        """tensor: (1, 3, 640, 640) float32 numpy array. Returns {output_name: numpy array}."""
+        inp = self.buffers[self.inputs[0]]
+        inp.copy_(torch.from_numpy(np.ascontiguousarray(tensor)).to(inp.dtype))  # CPU -> GPU
+        self.context.execute_async_v3(self.stream)
+        torch.cuda.synchronize()  # wait for the GPU to finish
+        return {n: self.buffers[n].cpu().numpy() for n in self.outputs}  # GPU -> CPU
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ def sigmoid(x):
     single numbers and on whole numpy arrays, which is what this function must handle too.
     """
     # TODO
-    raise NotImplementedError
+    return 1 / (1 + np.exp(-x))
 
 
 def decode_row(row, scale):
@@ -44,8 +44,30 @@ def decode_row(row, scale):
     so divide by scale to get back to the original frame (BASICS.md, section 6, "Back to frame pixels").
     """
     # TODO
-    raise NotImplementedError
+    decoded = {}
 
+    decoded["corners"] = np.array([[row[0]/scale,row[1]/scale], [row[6]/scale,row[7]/scale], [row[4]/scale,row[5]/scale], [row[2]/scale,row[3]/scale]])
+    decoded["score"] = sigmoid(row[8])  
+    max = 0
+    index = 0
+    for i in range(9, 12):
+        if(sigmoid(row[i]) > max):
+            max = row[i]
+            index = i
+    decoded["color_id"] = index - 9
+    decoded["color"] = config.COLORS[index - 9]
+    max = 0
+    index = 0
+    for i in range (13,21):
+        if(sigmoid(row[i]) > max):
+            max = row[i]
+            index = i
+    decoded["number_id"] = index - 13
+    decoded["number"] = config.NUMBERS[index - 13]
+
+    return decoded
+
+    
 
 if __name__ == "__main__":
     # Part A: investigate. This runs before the checks so you can use it to work out the layout.

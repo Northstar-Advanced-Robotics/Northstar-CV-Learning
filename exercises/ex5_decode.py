@@ -13,7 +13,7 @@ import checks
 import config
 from backends import get_model, read_frame
 from ex3_preprocess import preprocess
-from ex4_raw_output import sigmoid
+from ex4_raw_output import decode_row, sigmoid
 
 
 def decode_all(raw, scale, score_thr=config.SCORE_THRESHOLD, iou_thr=config.NMS_IOU_THRESHOLD):
@@ -31,16 +31,43 @@ def decode_all(raw, scale, score_thr=config.SCORE_THRESHOLD, iou_thr=config.NMS_
     Python loop over 25200 rows. Time both: the robot runs this on every frame.
     """
     # TODO
-    raise NotImplementedError
+    threshold = np.log(score_thr / (1 - score_thr))
+    bestRows = raw[raw[:, 8] >= threshold]
+    decoded = [decode_row(row, scale) for row in bestRows]
+    boxes = []
+    for value in bestRows:
+        max_x = value[0:7:2].max()
+        max_y = value[1:7:2].max()
+        min_x = value[0:7:2].min()
+        min_y = value[1:7:2].min()
+        width = max_x-min_x
+        height = max_y-min_y
+        boxes.append([min_x,min_y,width,height])
+    scores = sigmoid(bestRows[:,8])
+    keep = cv2.dnn.NMSBoxes(boxes, scores, score_thr, iou_thr)
+    returnList = []
+    for i in keep:
+        returnList.append(decode_row(bestRows[i], scale))
+
+    return sorted(returnList, key=lambda d: -d["score"])
+
+
 
 
 COLOR_BGR = {"blue": (255, 128, 0), "red": (0, 0, 255), "gray": (160, 160, 160), "purple": (255, 0, 200)}
 
 
 def draw_detections(img, dets):
-    """Draw each plate on img: its 4-corner outline, a dot at its center, and a label like
-    'blue 3 0.92'. Return img. (cv2.polylines, cv2.circle, cv2.putText)"""
-    # TODO
+    
+    for d in dets:
+        pts = d["corners"].astype(np.int32)
+        color = COLOR_BGR[d["color"]]
+        cv2.polylines(img, [pts], True, color, 2)
+        cx, cy = d["corners"].mean(0).astype(int)
+        cv2.circle(img, (cx, cy), 4, color, -1)
+        label = f"{d['color']} {d['number']} {d['score']:.2f}"
+        x, y = pts[:, 0].min(), pts[:, 1].min() - 8
+        cv2.putText(img, label, (int(x), int(max(y, 15))), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     return img
 
 

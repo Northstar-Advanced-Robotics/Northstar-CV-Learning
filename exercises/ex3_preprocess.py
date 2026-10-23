@@ -28,7 +28,18 @@ def letterbox(img, size=config.INPUT_SIZE):
       scale  -- how much the picture shrank: resized size / original size (e.g. 640 / 1440 = 0.444)
     """
     # TODO
-    raise NotImplementedError
+    canvas = np.zeros((size,size,3), np.uint8)
+
+
+    height, width = img.shape[:2]
+    height_scale = size/height
+    width_scale = size/width
+    scale = min(height_scale,width_scale)
+    new_height = int(scale*height)
+    new_width = int(scale*width)
+
+    canvas[:new_height, :new_width] = cv2.resize(img, (new_width, new_height))
+    return (canvas,scale)
 
 
 def to_tensor(canvas):
@@ -38,8 +49,10 @@ def to_tensor(canvas):
     order and the value range (the "ppp" block in the robot's code).
     """
     # TODO
-    raise NotImplementedError
-
+    new_canvas=cv2.cvtColor(canvas,cv2.COLOR_BGR2RGB).astype(np.float32) / float(255)
+    new_tensor = new_canvas.transpose(2,0,1)
+    new_tensor = new_tensor[None, :, :, :]
+    return new_tensor
 
 def preprocess(img):
     try:

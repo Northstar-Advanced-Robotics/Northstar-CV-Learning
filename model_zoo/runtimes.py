@@ -75,7 +75,16 @@ class OnnxRunner:
         # next (another model, OpenVINO, ...). That makes side-by-side timings meaningless.
         options.add_session_config_entry("session.intra_op.allow_spinning", "0")
         try:
-            self.session = ort.InferenceSession(str(path), options, providers=providers)
+            try:
+                self.session = ort.InferenceSession(str(path), options, providers=providers)
+            except Exception as e:
+                # On ARM (the Jetson), ORT's top optimization level rewrites float16 ops into its own
+                # NHWC layout, then finds it has no kernel for some of them (rp_0526's MaxPool).
+                # One level down skips that layout rewrite; the model itself is plain ONNX.
+                if "com.ms.internal.nhwc" not in str(e):
+                    raise
+                options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+                self.session = ort.InferenceSession(str(path), options, providers=providers)
         except Exception as e:  # onnxruntime raises its own exception types
             if "EfficientNMS_TRT" in str(e):
                 raise RuntimeError(f"{path.name} contains EfficientNMS_TRT, a TensorRT plugin that ONNX Runtime "
@@ -213,14 +222,17 @@ class TensorRTRunner:
             self.context.set_tensor_address(name, self.buffers[name].data_ptr())
             t = Tensor(name, shape, np.dtype(trt.nptype(trt_dtype)))
             (self.inputs if self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else self.outputs).append(t)
-        self.stream = torch.cuda.current_stream().cuda_stream
+        # Our own CUDA stream: on the default stream TensorRT adds extra syncs (and prints a warning).
+        self.torch_stream = torch.cuda.Stream()
+        self.stream = self.torch_stream.cuda_stream
         self.metadata = {"tensorrt": trt.__version__, "built_with": built}
 
     def __call__(self, x):
         import torch
 
         check_input(x, self.inputs[0])
-        self.buffers[self.inputs[0].name].copy_(torch.from_numpy(np.ascontiguousarray(x)))  # CPU -> GPU
-        self.context.execute_async_v3(self.stream)
-        torch.cuda.synchronize()
-        return [self.buffers[t.name].cpu().numpy() for t in self.outputs]  # GPU -> CPU
+        with torch.cuda.stream(self.torch_stream):
+            self.buffers[self.inputs[0].name].copy_(torch.from_numpy(np.ascontiguousarray(x)))  # CPU -> GPU
+            self.context.execute_async_v3(self.stream)
+            outs = [self.buffers[t.name].cpu() for t in self.outputs]  # GPU -> CPU, waits for the stream
+        return [o.numpy() for o in outs]
