@@ -19,7 +19,8 @@ import numpy as np
 
 import zoo
 
-FAMILY_MODULES = {"yolov5": "m2_yolov5", "yolox": "m3_yolox", "ultralytics": "m4_ultralytics", "end2end": "m5_end2end"}
+FAMILY_MODULES = {"yolov5": "m2_yolov5", "yolox": "m3_yolox", "ultralytics": "m4_ultralytics",
+                  "szurp_v8": "m4b_szurp_v8", "end2end": "m5_end2end", "yolo26_e2e": "m5b_yolo26"}
 OUT_DIR = zoo.HERE / "out"  # every script saves its pictures here
 
 
@@ -195,7 +196,7 @@ def draw_points(img, pts, title=None):
     return img
 
 
-# ----------------------------------------------------------------------------- family scripts (m2-m5)
+# ----------------------------------------------------------------------------- family scripts (m2-m5b)
 def family_demo(module, family, checks):
     """What every family script does when you run it:
     1. check the functions Part A needs (preprocess and friends) on synthetic input

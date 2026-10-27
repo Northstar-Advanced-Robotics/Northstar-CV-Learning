@@ -17,7 +17,7 @@ Region of interest (only look at part of the frame, like the robot's use_roi):
       python3 m7_compare.py --roi 0,200,-1,600               # -1 = don't crop that dimension
       python3 m7_compare.py --live --source hik --roi-config ../configs/my_robot.yaml   # its use_roi + roi
 
-Saves out/compare_frame<N>.jpg (one tile per model) and prints a table. Needs m2-m5 finished,
+Saves out/compare_frame<N>.jpg (one tile per model) and prints a table. Needs m2-m5b finished,
 or --reference.
 """
 import sys

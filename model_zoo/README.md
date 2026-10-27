@@ -1,7 +1,7 @@
 # Model zoo: every armor detector we could find, and which one we should use
 
-The main track (exercises 1-7) took one model apart. This track gives you **8 armor-detecting models from 5
-RoboMaster teams, saved in 4 different file formats: 16 files in all**. They all do the same job: find each armor
+The main track (exercises 1-7) took one model apart. This track gives you **10 armor-detecting models from 5
+RoboMaster teams plus our own, saved in 4 different file formats: 18 files in all**. They all do the same job: find each armor
 plate in a picture and give back its 4 corners. But they disagree about almost everything else:
 
 - **what they want as input:** 640×640 or 416×416 or 576×768 pixels, RGB or BGR color order, values 0..1 or 0..255,
@@ -20,7 +20,7 @@ expects and returns, and what we found while checking. Read it when the hints ru
 ```
 m1  read what each file says about itself (no running)
  │
-m2  m3  m4  m5   one decoder per "family" of models: get every model in it running
+m2 m3 m4 m4b m5 m5b   one decoder per "family" of models: get every model in it running
  │
 m6  the same model in different files: do they really give the same answers?
  │
@@ -58,12 +58,12 @@ its own TODOs: that's expected.
 | `zoo.py` | the list of every model file: where it is, which family it belongs to, which team made it. **Start here.** |
 | `runtimes.py` | opens any model file, whatever its format, and runs it the same way |
 | `common.py` | shared helpers: letterbox, NMS, drawing, timing |
-| `m1_io_cards.py` ... `m6_same_network.py` | **yours**: functions marked TODO, with comments saying what to write and why |
+| `m1_io_cards.py` ... `m6_same_network.py` | **yours** (including `m4b` and `m5b`): functions marked TODO, with comments saying what to write and why |
 | `m7_compare.py`, `m8_benchmark.py` | finished tools: side-by-side pictures, and the scoreboard |
 | `label_frames.py` | click plate corners on video frames to make the right answers for m8 |
 | `jetson/build_engines.py` | turns every ONNX model into a TensorRT engine, on the Jetson |
 | `solutions/` | working versions of m1-m6. Each runs on its own too: `python3 solutions/m2_yolov5.py` |
-| `tools/` | for CV leads: `make_exercises.py` rebuilds m1-m6 from the solutions; `export_reborn_yolov8.py` |
+| `tools/` | for CV leads: `make_exercises.py` rebuilds m1-m6 from the solutions; `inspect_pt.py` safely looks inside a `.pt`; `export_ultralytics.py` turns one into ONNX; `export_reborn_yolov8.py` |
 | `out/` | where every script saves its pictures |
 | `../shared/cameras.py` | reads frames from any camera or video (shared with the main track) |
 
@@ -72,7 +72,7 @@ its own TODOs: that's expected.
 Like the main track: each TODO says what to write and why, and running the file checks your functions automatically.
 
 A **family** is a group of models that answer in the same layout, so one decoder works for all of them. The family
-scripts (m2-m5) run in two parts:
+scripts (m2-m5b) run in two parts:
 
 - **Part A** checks your `preprocess()` (and any helpers), runs every model of the family that works on your computer,
   and prints its **raw** answer. It also saves `out/<model>_raw_points.jpg`, with the best guess's 4 points numbered in
@@ -232,6 +232,31 @@ and some of their class names pack several facts into one word, like `Bfour` (bl
 
 ---
 
+## m4b: RobotPilots' 2026 model (`m4b_szurp_v8.py`)
+
+**What this is about.** RobotPilots' newest model (from their vision group SZURPVision) started as the same kind of
+Ultralytics model as m4's, but they redesigned its last layers. Compare its answer with m4's: still one column per
+guess, but **no box at all**, the 4 color scores come first, then 9 class scores, then the corners. It also takes a
+480×640 picture, the camera's own 4:3 shape, so a camera frame is just shrunk: no padding.
+
+**Where to look.** [Their README, section 4.1](https://github.com/SZURPVision/26_NNDeployment_Lib_and_Detection_Models)
+(in Chinese: the tables are easy to follow with a translator) and `V8_21InfantryPostProcessor` in their
+`src/core/algorithm/NNdeployment/src/postprocess/network_postprocess.cpp`. `m4b_szurp_v8.py` repeats what you need.
+
+**What to do.** Fill in `preprocess()`, `as_rows()` and `decode()`.
+
+**Questions**
+1. List every difference between this model's answer and m4's. Which would break m4's decoder, and how?
+2. Its file name says "fp16". What number type does it actually want as input (m1)? What could "fp16" mean then?
+3. m1 shows the class names stored inside it. Can you use them? Where do the real names come from?
+4. With no "is this a plate?" score, what does the code use as the score? What does that assume?
+5. RobotPilots use an NMS overlap limit of 0.2, the others 0.3. What does a lower limit change?
+6. This model knows white plates (switched off) but no longer purple or infantry 5. Why might a team drop classes?
+
+**Done when:** the checks pass and the plates are outlined in `out/`.
+
+---
+
 ## m5: End-to-end models (`m5_end2end.py`)
 
 **What this is about.** Actor&Thinker's models remove the duplicates themselves ("end-to-end",
@@ -253,13 +278,38 @@ input and output; `m5_end2end.py` repeats what you need.
 
 ---
 
+## m5b: Our own YOLO26 model (`m5b_yolo26.py`)
+
+**What this is about.** A model our team trained: YOLO26, the newest Ultralytics generation, first on made-up
+(synthetic) armor pictures, then on Actor&Thinker's labeled dataset. It's end-to-end like m5's, and its rows are even
+the same width: 18 numbers. **But they mean something else**: no color scores, and every corner has 3 numbers
+(x, y, and how visible it is). Run m5's decoder on it and nothing crashes; every answer is just wrong. That's the lesson.
+
+**Where to look.** The checkpoint itself (`../models/northstar/ns_yolo26n_v2.pt`) and m1's card for the ONNX. The
+comments in `m5b_yolo26.py` lay out both 18-number rows side by side.
+
+**What to do.** Fill in `preprocess()`, `label_info()` and `decode()`.
+
+**Questions**
+1. Write m5's row and m5b's row next to each other, number by number. Which numbers would m5's decoder misread?
+2. It has 300 rows, m5's models 30. What does that number control?
+3. It only learned sentry, 1, 2 and 3. What does it say about the blue 4s on frame 400, and how sure is it? What
+   would happen with a threshold of 0.25 (Ultralytics' default) instead of 0.5?
+4. What could the "visible" number be good for when aiming?
+5. `tools/export_ultralytics.py` passes `nms=False`. Export without it (a CV lead can run it) and read m1's card: what
+   changed? Why does one export setting change the whole output?
+
+**Done when:** the checks pass and the plates are outlined in `out/`.
+
+---
+
 ## m6: One model, many files (`m6_same_network.py`)
 
 **What this is about.** Several files in the zoo are the same trained model converted to another format or precision
 ([BASICS 10](../BASICS.md#10-model-files-and-the-programs-that-run-them)). A conversion can quietly change the answers.
 The only way to know is to run both files on the same pictures and compare.
 
-**What to do.** Needs m2-m5 done. Fill in `compare()`, then run it. It compares every model that has two or more files
+**What to do.** Needs m2-m5b done. Fill in `compare()`, then run it. It compares every model that has two or more files
 on your computer (`--frames 100` and `--every 2` look at more pictures).
 
 **Questions**
@@ -279,7 +329,7 @@ on your computer (`--frames 100` and `--every 2` look at more pictures).
 python3 m7_compare.py --frames 60,400,600
 python3 m7_compare.py --one-per-network --frames 100,300,500
 ```
-Each `out/compare_frame<N>.jpg` shows one tile per model, zoomed in on the plates. Add `--reference` if your m2-m5
+Each `out/compare_frame<N>.jpg` shows one tile per model, zoomed in on the plates. Add `--reference` if your m2-m5b
 aren't finished yet (it uses the solutions).
 
 Live, on a camera (keys: q quit, space pause, s snapshot):
@@ -343,18 +393,21 @@ Things to weigh:
 2. Which model is best on the demo video but worst on our footage, or the other way round? Why might that be?
 3. What would it take to retrain the winner on our own pictures? (Reborn's and AT's repos include how they trained.)
 
-A first look, from a Windows laptop's processor on 200 demo frames (NOT the Jetson, NOT against labels). "hit %" is how
-many frames had at least one plate found; "jitter" is how much the corners wobbled between frames:
+A first look, from a Windows laptop's processor on 200 demo frames, one file per model (NOT the Jetson, NOT against
+labels). "hit %" is how many frames had at least one plate found; "jitter" is how much the corners wobbled between frames:
 
 | model | runs with | FPS | hit % | jitter (pixels) |
 |---|---|---|---|---|
-| reborn_yolov8_int8 | OpenVINO, INT8 | 215 | 89 | 2.5 |
-| tup_1208 | ONNX Runtime | 171 | 36 | 3.5 |
-| tongji_yolo11_int8 | OpenVINO, INT8 | 99 | 81 | 3.0 |
-| rp_0708_openvino | OpenVINO | 87 | 93 | 2.7 |
-| rp_0526 | ONNX Runtime | 71 | 91 | 2.3 |
-| at_c2psa_640 | ONNX Runtime | 57 | 95 | 1.8 |
-| at_c2psa_576x768 | ONNX Runtime | 55 | 95 | 1.9 |
+| reborn_yolov8_int8 | OpenVINO, INT8 | 204 | 89 | 2.5 |
+| tup_1208 | ONNX Runtime | 149 | 36 | 3.5 |
+| tongji_yolo11_int8 | OpenVINO, INT8 | 100 | 81 | 3.0 |
+| rp_0708 | ONNX Runtime | 73 | 93 | 2.7 |
+| tup_0527 | ONNX Runtime | 68 | 81 | 3.0 |
+| rp_0526 | ONNX Runtime | 60 | 91 | 2.3 |
+| rp_v8n_0726 | ONNX Runtime | 56 | 94 | 2.3 |
+| ns_yolo26n_v2 (ours) | ONNX Runtime | 46 | 93 | 2.1 |
+| at_c2psa_640 | ONNX Runtime | 42 | 95 | 1.8 |
+| at_c2psa_576x768 | ONNX Runtime | 39 | 95 | 1.9 |
 
 Your numbers on the Jetson are the ones that count.
 
@@ -363,6 +416,7 @@ Your numbers on the Jetson are the ones that count.
 ## Going further
 
 - Turn Reborn's model into an ONNX file so it can become a TensorRT engine: [MODELS.md, section 7](MODELS.md#7-exporting-yolov8onnx-yourself).
-- Add more models: AT's `praysky_coord_noe2e_*`, the OpenVINO versions in TUP's repos, RobotPilots' next release.
+- Add more models: AT's `praysky_coord_noe2e_*`, the OpenVINO versions in TUP's repos, the OpenVINO copy of
+  `rp_v8n_0726` and RobotPilots' `Infantry-v5n` in SZURPVision's repo, our next training run.
   [MODELS.md, section 8](MODELS.md#8-adding-a-new-model) says how.
 - Plug the winner into the main track: its plates have the same format as exercise 5's, so exercises 6 and 7 work with it.

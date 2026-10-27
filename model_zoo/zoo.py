@@ -38,7 +38,7 @@ AT = "HEBUST Actor&Thinker"
 class ModelFile:
     name: str      # short id for the command line, e.g. --models rp_0708
     path: str      # relative to MODELS_DIR (or absolute)
-    family: str    # which decoder reads its output: yolov5 | yolox | ultralytics | end2end
+    family: str    # which decoder reads its output: yolov5 | yolox | ultralytics | szurp_v8 | end2end | yolo26_e2e
     network: str   # entries with the same network id hold the same trained weights
     team: str
     source: str    # where the file was published
@@ -115,6 +115,13 @@ MODELS = [
               "https://github.com/TongjiSuperPower/LabelRoboMaster (resource/best.onnx)",
               "FP32 ONNX of the same network as tongji_yolo11_int8 (before INT8). The one to build an engine from."),
 
+    # ---- family "szurp_v8": RobotPilots' redesigned YOLOv8 head, one COLUMN per guess: 4 colors, 9 classes, 4 corners
+    ModelFile("rp_v8n_0726", RPD + "rp_v8n_0726.onnx", "szurp_v8", "rp-v8n-0726", RP,
+              "https://github.com/SZURPVision/26_NNDeployment_Lib_and_Detection_Models "
+              "(所有模型/onnx/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx)",
+              "RobotPilots' 2026 model, from their vision group SZURPVision. 480x640 input (the camera's 4:3 "
+              "shape), no box, knows white (switched-off) plates. Its stored class names are placeholders."),
+
     # ---- family "end2end": NMS is inside the model, 30 finished detections x 18 values
     ModelFile("at_c2psa_640", ATD + "at_c2psa_640.onnx", "end2end", "at-c2psa-640", AT,
               "https://github.com/PraySky1337/AT_NN_Detector (common/praysky_c2psa_e2e_0228_640x640.onnx)",
@@ -122,6 +129,13 @@ MODELS = [
     ModelFile("at_c2psa_576x768", ATD + "at_c2psa_576x768.onnx", "end2end", "at-c2psa-576x768", AT,
               "https://github.com/PraySky1337/AT_NN_Detector (common/praysky_c2psa_e2e_0228_576x768.onnx)",
               "Same as at_c2psa_640 but 576x768: a 1440x1080 camera frame fits with no padding at all."),
+
+    # ---- family "yolo26_e2e": YOLO26 pose, NMS inside, 300 finished detections x 18 values (NOT AT's 18!)
+    ModelFile("ns_yolo26n_v2", "northstar/ns_yolo26n_v2.onnx", "yolo26_e2e", "ns-yolo26n-v2", "Northstar",
+              "our own: models/northstar/ns_yolo26n_v2.pt (uploaded as v2_final.pt), exported with "
+              "tools/export_ultralytics.py",
+              "YOLO26n pose trained on synthetic plates, then fine-tuned on Actor&Thinker's dataset. "
+              "8 classes: red and blue sentry, 1, 2, 3. Corners carry a 3rd value: how visible each one is."),
 ]
 
 

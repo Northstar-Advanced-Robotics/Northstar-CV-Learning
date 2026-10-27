@@ -14,6 +14,7 @@ from, its inputs and outputs, and what we found out about it.
 | `rp_0708_openvino2onnx.onnx` | that converted back to ONNX | main track (laptop mode), zoo | `yolov5_prefusion_backup.onnx` |
 | `rp_0708_openvino2onnx_nms.onnx` | that + a TensorRT NMS node: **the main track's model, the robot's `yolov5.onnx`** | main track, zoo | sp_vision `assets/yolov5.onnx` |
 | `rp_0708_openvino2onnx_nms_trt10.3.engine` | engine of the one above, TensorRT 10.3 (JetPack 6.1/6.2) | zoo | `yolov5.engine` |
+| `rp_v8n_0726.onnx` | their 2026 model (redesigned YOLOv8n-pose head, 480×640 input) | zoo | `Infantry-v8n-fp16-20260726-D1.8w-B16.onnx` (SZURPVision) |
 | **tup/** | Shenyang Aerospace Univ. TUP's YOLOX | | |
 | `tup_0527.onnx` | 2022 model | zoo | `opt-0527-001.onnx` |
 | `tup_1208.onnx` | later model | zoo | `opt-1208-001.onnx` |
@@ -26,6 +27,9 @@ from, its inputs and outputs, and what we found out about it.
 | **tongji/** | Tongji SuperPower's YOLO11n-pose, 38 classes | | |
 | `tongji_yolo11_int8.xml/.bin` | INT8 OpenVINO | zoo | sp_vision `assets/yolo11.xml` |
 | `tongji_yolo11.onnx` | the FP32 original | zoo | LabelRoboMaster `resource/best.onnx` |
+| **northstar/** | our own models | | |
+| `ns_yolo26n_v2.pt` | YOLO26n-pose checkpoint: synthetic plates, then fine-tuned on Actor&Thinker's dataset | the source | `v2_final.pt` |
+| `ns_yolo26n_v2.onnx` | the same, exported with `model_zoo/tools/export_ultralytics.py` (end-to-end head) | zoo | - |
 | **actor_thinker/** | HEBUST Actor&Thinker's end-to-end YOLO pose | | |
 | `at_c2psa_640.onnx` | 640x640 input | zoo | `praysky_c2psa_e2e_0228_640x640.onnx` |
 | `at_c2psa_576x768.onnx` | 576x768 input (the camera's 4:3 shape) | zoo | `praysky_c2psa_e2e_0228_576x768.onnx` |

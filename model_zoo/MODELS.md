@@ -11,7 +11,7 @@ the demo video.
 
 ## Contents
 1. [Where each file came from](#1-where-each-file-came-from)
-2. [The four output families at a glance](#2-the-four-output-families-at-a-glance)
+2. [The six output families at a glance](#2-the-six-output-families-at-a-glance)
 3. [Family cards](#3-family-cards)
 4. [The formats: ONNX, OpenVINO, NCNN, TensorRT](#4-the-formats)
 5. [Things we found out the hard way](#5-things-we-found-out-the-hard-way)
@@ -36,6 +36,7 @@ there. "Same bytes" means the file is byte-for-byte identical (same git hash) to
 | `robotpilots/rp_0708_openvino2onnx.onnx` | Northstar (our fork) | `scripts/onnx/yolov5_prefusion_backup.onnx` in [Northstar-sp_vision_25](https://github.com/Northstar-Advanced-Robotics/Northstar-sp_vision_25), see its `JETSON_ORIN.md` | yes |
 | `robotpilots/rp_0708_openvino2onnx_nms.onnx` | Northstar | `assets/yolov5.onnx`, same repo: **the main track's model** | yes |
 | `robotpilots/rp_0708_openvino2onnx_nms_trt10.3.engine` | Northstar | `yolov5.engine`, built from the one above with TensorRT 10.3 | - |
+| `robotpilots/rp_v8n_0726.onnx` | RobotPilots' vision group **SZURPVision** | `所有模型/onnx/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx` in [SZURPVision/26_NNDeployment_Lib_and_Detection_Models](https://github.com/SZURPVision/26_NNDeployment_Lib_and_Detection_Models) (their 2026 model) | yes |
 | `tup/tup_0527.onnx` | Shenyang Aerospace Univ. **TUP** | `model/opt-0527-001.onnx` in [tup-robomaster/TUP-InfantryVision-2022](https://github.com/tup-robomaster/TUP-InfantryVision-2022) | yes |
 | `tup/tup_1208.onnx` | TUP | `opt-1208-001.onnx` in a copy of TUP's 2023 repo, [RebornVision/TUP-Vision-2023-Based](https://github.com/RebornVision/TUP-Vision-2023-Based) | yes |
 | `tup/tup_1208_onnx2ncnn.param/.bin` | unknown, converted with `onnx2ncnn` | `opt-1208-001.param/.bin` | - |
@@ -47,6 +48,8 @@ there. "Same bytes" means the file is byte-for-byte identical (same git hash) to
 | `tongji/tongji_yolo11.onnx` | Tongji SuperPower | `resource/best.onnx` in LabelRoboMaster (FP32, before INT8) | yes |
 | `actor_thinker/at_c2psa_640.onnx` | HEBUST **Actor&Thinker** | `common/praysky_c2psa_e2e_0228_640x640.onnx` in [PraySky1337/AT_NN_Detector](https://github.com/PraySky1337/AT_NN_Detector) | yes |
 | `actor_thinker/at_c2psa_576x768.onnx` | Actor&Thinker | `common/praysky_c2psa_e2e_0228_576x768.onnx`, same repo | yes |
+| `northstar/ns_yolo26n_v2.pt` | **our team** | `v2_final.pt`: YOLO26n-pose, trained on synthetic plates (run `armor_pose_ci_synth`), then fine-tuned on Actor&Thinker's dataset (run `armor_pose_ci_ft_actor_thinker`), Ultralytics 8.4.187 | - |
+| `northstar/ns_yolo26n_v2.onnx` | our team | exported from the `.pt` with `tools/export_ultralytics.py` (end-to-end head) | - |
 
 The zoo name is the file name without its extension (`rp_0708_openvino`, `tup_1208_pnnx`, ...). The demo video is
 `videos/demo.avi`, the same bytes as `assets/demo/demo.avi` in our sp_vision fork.
@@ -64,26 +67,26 @@ credited to anyone, and its FP32 version ships with their labeling tool LabelRob
 
 ---
 
-## 2. The four output families at a glance
+## 2. The six output families at a glance
 
-Same job (find armor plates, return 4 corners), four completely different ways of being asked and of answering.
-Each column is one family: models that answer in the same layout, so one decoder (m2-m5) reads all of them.
+Same job (find armor plates, return 4 corners), six completely different ways of being asked and of answering.
+Each column is one family: models that answer in the same layout, so one decoder (m2-m5b) reads all of them.
 
-| | **yolov5** (m2) | **yolox** (m3) | **ultralytics** (m4) | **end2end** (m5) |
-|---|---|---|---|---|
-| models | rp_0708, rp_0526, rp_0708_openvino* | tup_0527, tup_1208 (+NCNN) | reborn_yolov8, tongji_yolo11 | at_c2psa_640, at_c2psa_576x768 |
-| input size | 640x640 | 416x416 | 416x416 / 640x640 | 640x640 / **576x768** |
-| input dtype | float32 (**rp_0526: float16**) | float32 | float32 | float32 |
-| color order | RGB | **BGR** | RGB | RGB |
-| values | 0..1 | **0..255** | 0..1 | 0..1 |
-| letterbox | **top-left**, black | centered, black | centered, gray 114 | centered, gray 114 |
-| output | (1, 25200, 22) | (1, 3549, 21) | **(1, 4+C+8, N)** values-first | (1, 30, 18) |
-| one row is | one anchor box | one grid cell | one grid cell (after transposing) | one finished detection |
-| corners | pixels | **cell offsets** | pixels | pixels |
-| confidence | column 8, **a logit** | column 8, probability | max class score, probability | column 4, probability |
-| labels | 4 colors + 9 numbers | 4 colors + 8 numbers | 2 colors, or 38 combined classes | 12 size+number classes + 4 colors |
-| NMS | you | you | you | **inside the model** |
-| corner order | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR |
+| | **yolov5** (m2) | **yolox** (m3) | **ultralytics** (m4) | **szurp_v8** (m4b) | **end2end** (m5) | **yolo26_e2e** (m5b) |
+|---|---|---|---|---|---|---|
+| models | rp_0708, rp_0526, rp_0708_openvino* | tup_0527, tup_1208 (+NCNN) | reborn_yolov8, tongji_yolo11 | rp_v8n_0726 | at_c2psa_640, at_c2psa_576x768 | ns_yolo26n_v2 (ours) |
+| input size | 640x640 | 416x416 | 416x416 / 640x640 | **480x640** | 640x640 / **576x768** | 640x640 |
+| input dtype | float32 (**rp_0526: float16**) | float32 | float32 | float32 (despite "fp16" in its name) | float32 | float32 |
+| color order | RGB | **BGR** | RGB | RGB | RGB | RGB |
+| values | 0..1 | **0..255** | 0..1 | 0..1 | 0..1 | 0..1 |
+| letterbox | **top-left**, black | centered, black | centered, gray 114 | centered, **gray 124** (none for 4:3 frames) | centered, gray 114 | centered, gray 114 |
+| output | (1, 25200, 22) | (1, 3549, 21) | **(1, 4+C+8, N)** values-first | **(1, 21, 6300)** values-first | (1, 30, 18) | **(1, 300, 18)** |
+| one row is | one anchor box | one grid cell | one grid cell (after transposing) | one grid cell (after transposing) | one finished detection | one finished detection |
+| corners | pixels | **cell offsets** | pixels | pixels | pixels | pixels, **plus a "visible" score each** |
+| confidence | column 8, **a logit** | column 8, probability | max class score, probability | max class score, probability | column 4, probability | column 4, probability |
+| labels | 4 colors + 9 numbers | 4 colors + 8 numbers | 2 colors, or 38 combined classes | 4 colors + 9 classes (**no box**) | 12 size+number classes + 4 colors | 8 color+number classes |
+| NMS | you | you | you | you (overlap limit **0.2**) | **inside the model** | **inside the model** |
+| corner order | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR | TL, BL, BR, TR |
 
 Everything in **bold** is a trap: get it wrong and the model runs fine but gives garbage, or nothing.
 
@@ -148,6 +151,25 @@ Everything in **bold** is a trap: get it wrong and the model runs fine but gives
   decoder picks the label table from C.
 - **Threshold:** 0.7 (the robot's value).
 
+### szurp_v8: RobotPilots' 2026 model (m4b)
+- **In plain words:** an Ultralytics YOLOv8n-pose with a redesigned head. One column per guess like m4, but no box:
+  4 color scores, 9 class scores, 4 corners. The score is the best class score.
+- **Where the facts come from:** SZURPVision's README (section 4.1) and their `network_preprocess.cpp`,
+  `network_deployment_openvino.cpp` and `network_postprocess.cpp` (`V8_21InfantryPostProcessor`).
+- **Input:** `images`, (1, 3, **480, 640**): 480 high, 640 wide, the camera's 4:3 shape, so a 1440x1080 frame is
+  only resized. Other shapes are centered on **gray 124**. RGB, 0..1, float32 (the "fp16" in the file name is about
+  how its weights are stored, not its inputs).
+- **Output:** (1, 21, 6300), one column per guess. 6300 = 60x80 + 30x40 + 15x20 grid cells. Transposed, each row:
+
+  | columns | meaning |
+  |---|---|
+  | 0-3 | color scores: blue, red, **white** (switched off), purple. The 2026 model never says purple |
+  | 4-12 | class scores: sentry, hero (1), engineer (2), 3, 4, 5, outpost, base bottom, base top. Never says 5 |
+  | 13-20 | 4 corners x, y in input pixels: TL, BL, BR, TR |
+- Hero (1) and the base's bottom plate are **big** plates, everything else small (their code says so).
+- The class names stored in the file are placeholders (`class0` ... `class8`): use the README's table.
+- **Threshold:** 0.5. NMS overlap limit **0.2** (`defaultNmsThreshold` for armor), stricter than the others' 0.3.
+
 ### end2end: Actor&Thinker's end-to-end YOLO pose (m5)
 - **In plain words:** the model removes the duplicates itself and returns at most 30 finished plates; just keep the ones
   with a high enough score.
@@ -167,6 +189,26 @@ Everything in **bold** is a trap: get it wrong and the model runs fine but gives
 - The same repo also has `praysky_coord_noe2e_*` models (CoordAtt attention, NMS export, same 1x30x18 output): worth adding.
 
 ---
+
+### yolo26_e2e: our own YOLO26 model (m5b)
+- **In plain words:** end-to-end like m5's models and the same row width (18), but the 18 numbers mean something else:
+  no color scores, and 3 numbers per corner.
+- **Where the facts come from:** the checkpoint (`python3 tools/inspect_pt.py ../models/northstar/ns_yolo26n_v2.pt` reads its
+  settings without loading it) and the exported ONNX's card in m1.
+- **Input:** `images`, (1, 3, 640, 640), centered on gray 114, RGB, 0..1, float32.
+- **Output:** (1, **300**, 18), the 300 best guesses, one plate each:
+
+  | columns | meaning |
+  |---|---|
+  | 0-3 | box x1, y1, x2, y2 (input pixels) |
+  | 4 | score, 0..1 |
+  | 5 | class id as a float: 0 red_sentry, 1 red_1, 2 red_2, 3 red_3, 4 blue_sentry, 5 blue_1, 6 blue_2, 7 blue_3 |
+  | 6-17 | 4 corners as **x, y, visible** (visible = 0..1): TL, BL, BR, TR |
+- It only learned sentry, 1, 2 and 3. On the demo's blue 4s it says "blue 3" with a score under 0.3.
+- **The export decides the output.** With `nms=False`, Ultralytics exports this end-to-end head. Without it,
+  Ultralytics 8.4 exports the raw head instead: (1, 24, 8400), one column per guess, 4 box + 8 classes + 12 corner
+  values, and you'd have to do NMS yourself. Same `.pt`, two different contracts.
+- **Threshold:** 0.5 (Ultralytics' own default is 0.25).
 
 ## 4. The formats
 
@@ -210,6 +252,16 @@ Everything in **bold** is a trap: get it wrong and the model runs fine but gives
 9. **Prebuilt engines are a trap.** Seven engines came with the models, all built with TensorRT 10.6. JetPack 6 has 10.3, so none
    of them load on our Jetson. We kept one (`tup_1208_trt10.6`) to show the error. Rebuild from ONNX on the Jetson
    (`jetson/build_engines.py`).
+10. **Same shape, different meaning.** `at_c2psa_*` and `ns_yolo26n_v2` both answer with 18 numbers per row. In AT's,
+    numbers 6-9 are color scores; in ours, they're the first corner's x, y, visible and the second corner's x.
+    A decoder that only checks the shape would run fine and be wrong on every plate.
+11. **One export setting changes the whole output.** Exporting `ns_yolo26n_v2.pt` with or without `nms=False`
+    gives (1, 300, 18) or (1, 24, 8400). Whoever exports a model decides its contract: write down how.
+12. **File names and stored labels can mislead.** `Infantry-v8n-fp16-...onnx` wants float32 input, and its stored class
+    names are `class0` ... `class8`. Read the inputs from the file and the meanings from the team's docs or code.
+13. **A model can only name what it was trained on.** `ns_yolo26n_v2` never saw a 4, so it calls blue 4s "blue 3",
+    unsure (score < 0.3). `rp_v8n_0726` dropped infantry 5 and purple on purpose for 2026. Check the class list
+    against the robots you'll actually fight.
 
 ---
 
@@ -241,7 +293,8 @@ The network uses Reborn's custom MobileNetV3 layers, so it only loads with their
 `tools/export_reborn_yolov8.py` has the full steps (separate virtual environment, PyTorch 2.3 CPU, their package first on the import
 path). It writes `models/reborn/reborn_yolov8.onnx`, which shows up as `reborn_yolov8`.
 
-Loading a `.pt` runs code (it's a Python pickle). We scanned both checkpoints without loading them: they only reference `torch`,
+Loading a `.pt` runs code (it's a Python pickle). `tools/inspect_pt.py` checks any checkpoint without loading it. We
+scanned both of Reborn's that way: they only reference `torch`,
 `ultralytics`, `numpy`, `collections` and one `dill` helper that rebuilds Python's `set` type.
 
 ---
@@ -251,7 +304,9 @@ Loading a `.pt` runs code (it's a Python pickle). We scanned both checkpoints wi
 1. Put the file in `models/<team>/`, named `<team>_<model>[_<what changed>]` like the others (or anywhere, with an absolute path).
 2. Read its card: add a `ModelFile(...)` line to `zoo.py` and run `python3 m1_io_cards.py --models <name>`.
 3. Find out its contract. If the output matches a family table above, give it that family. If not, write a new family module
-   (copy the closest of m2-m5, add it to `FAMILY_MODULES` in `common.py`).
+   (copy the closest of m2-m5b, add it to `FAMILY_MODULES` in `common.py`).
+   A `.pt` from Ultralytics becomes an ONNX with `tools/export_ultralytics.py` (it asks for the end-to-end head when
+   the model has one).
 4. Find the team's inference code and check the input side: color order, 0..1 or 0..255, letterbox position and pad value.
    Then check the output side with Part A of the family script: draw the raw points and see where they land.
 5. If it's an ONNX, `jetson/build_engines.py --models <name>` makes an engine; then `m8_benchmark.py` puts it on the scoreboard.
@@ -272,6 +327,8 @@ on the robot for a competition.
 | Reborn's [training repo](https://github.com/gaoxinstudent/RM-Armor-Detect) | AGPL-3.0 | sharing modified versions means sharing their source too |
 | TUP's [TUP-InfantryVision-2022](https://github.com/tup-robomaster/TUP-InfantryVision-2022) (`tup_*`) | GPL-3.0 | sharing modified versions means sharing their source too. That's why we link to TUP's code instead of copying it |
 | Actor&Thinker's [AT_NN_Detector](https://github.com/PraySky1337/AT_NN_Detector) (`at_*`) | AGPL-3.0 | same as above; also why we link instead of copying |
-| models trained with Ultralytics (`reborn_*`, `tongji_*`, `at_*`) | their metadata says AGPL-3.0 | same as above |
+| RobotPilots' [SZURPVision deployment repo](https://github.com/SZURPVision/26_NNDeployment_Lib_and_Detection_Models) (`rp_v8n_0726`) | MIT | free to use and copy, keep their notice |
+| our `ns_yolo26n_v2` | ours, but trained with Ultralytics (AGPL-3.0) and partly on Actor&Thinker's dataset (their repo is AGPL-3.0) | treat it like the AGPL models above |
+| models trained with Ultralytics (`reborn_*`, `tongji_*`, `at_*`, `rp_v8n_0726`, `ns_*`) | their metadata says AGPL-3.0 | same as above |
 
 This is a summary to help you notice the question, not legal advice.

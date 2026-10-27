@@ -10,7 +10,8 @@ generated files by hand, and don't run this in a checkout where someone is doing
 from pathlib import Path
 
 ZOO = Path(__file__).resolve().parents[1]
-FILES = ["m1_io_cards.py", "m2_yolov5.py", "m3_yolox.py", "m4_ultralytics.py", "m5_end2end.py", "m6_same_network.py"]
+FILES = ["m1_io_cards.py", "m2_yolov5.py", "m3_yolox.py", "m4_ultralytics.py", "m4b_szurp_v8.py", "m5_end2end.py",
+         "m5b_yolo26.py", "m6_same_network.py"]
 
 
 def to_exercise(text):

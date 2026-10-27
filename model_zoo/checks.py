@@ -73,7 +73,8 @@ def _corners(dets, k=0):
 # ============================================================================ Part A (before decoding)
 def check_part_a(family, module):
     r = _Report(f"{family}: preprocess and the helpers Part A needs")
-    {"yolov5": _a_yolov5, "yolox": _a_yolox, "ultralytics": _a_ultralytics, "end2end": _a_end2end}[family](r, module)
+    {"yolov5": _a_yolov5, "yolox": _a_yolox, "ultralytics": _a_ultralytics, "szurp_v8": _a_szurp_v8,
+     "end2end": _a_end2end, "yolo26_e2e": _a_yolo26}[family](r, module)
     return r.done()
 
 
@@ -166,6 +167,33 @@ def _a_ultralytics(r, m):
     r.run("as_rows(): values-first -> one row per candidate", t_rows)
 
 
+def _a_szurp_v8(r, m):
+    inp = Tensor("images", [1, 3, 480, 640], np.dtype(np.float32))
+
+    def t_camera():
+        x, tf = m.preprocess(_frame(1080, 1440), inp)
+        _check_tensor(x, tf, (1, 3, 480, 640), np.float32)
+        assert tf.pad_x == 0 and tf.pad_y == 0 and math.isclose(tf.scale, 480 / 1080), \
+            "a 1440x1080 frame has the input's 4:3 shape: it should just be resized, with no padding"
+        assert x.max() <= 1.0 + 1e-6, "values should be 0..1"
+        assert math.isclose(float(x[0, 2, 200:300].mean()), 1.0), "RGB: pure blue should end up in channel 2"
+
+    def t_pad():
+        x, tf = m.preprocess(_frame(480, 1280), inp)
+        assert tf.pad_x == 0 and tf.pad_y == 120 and math.isclose(tf.scale, 0.5), \
+            f"a 1280x480 frame should be centered with 120 rows of padding above and below, got pad ({tf.pad_x}, {tf.pad_y})"
+        assert _close(x[0, :, :120].mean(), 124 / 255), "RobotPilots pad with gray 124 (not 114 like Ultralytics)"
+
+    def t_rows():
+        a = np.random.default_rng(0).random((1, 21, 6300)).astype(np.float32)
+        got = m.as_rows(a)
+        assert got.shape == (6300, 21) and _close(got[9], a[0, :, 9]), "as_rows() should give (6300, 21): one row per guess"
+
+    r.run("preprocess(): 4:3 camera frame, just resized", t_camera)
+    r.run("preprocess(): other shapes centered on gray 124", t_pad)
+    r.run("as_rows(): one column per guess -> one row per guess", t_rows)
+
+
 def _a_end2end(r, m):
     def t_layout():
         x, tf = m.preprocess(_frame(480, 1280), Tensor("images", [1, 3, 576, 768], np.dtype(np.float32)))
@@ -189,10 +217,28 @@ def _a_end2end(r, m):
     r.run("class_info(): s<size>_o<object> names", t_class)
 
 
+def _a_yolo26(r, m):
+    def t_layout():
+        x, tf = m.preprocess(_frame(540, 720), Tensor("images", [1, 3, 640, 640], np.dtype(np.float32)))
+        _check_tensor(x, tf, (1, 3, 640, 640), np.float32)
+        assert tf.pad_x == 0 and tf.pad_y == 80, f"a 720x540 frame should be centered (80 rows of padding on top), got pad ({tf.pad_x}, {tf.pad_y})"
+        assert math.isclose(float(x[0, 2, 200:400].mean()), 1.0), "RGB: pure blue should end up in channel 2"
+        assert _close(x[0, :, :80].mean(), 114 / 255), "the padding should be gray 114, values 0..1"
+
+    def t_labels():
+        for cid, want in [(0, ("red", "sentry")), (3, ("red", "3")), (5, ("blue", "1")), (7, ("blue", "3"))]:
+            got = tuple(m.label_info(cid))
+            assert got == want, f"label_info({cid}) should be {want}, got {got}"
+
+    r.run("preprocess(): centered, gray 114, RGB, 0..1", t_layout)
+    r.run("label_info(): color and number from names like blue_1", t_labels)
+
+
 # ============================================================================ Part B (decode)
 def check_part_b(family, module):
     r = _Report(f"{family}: decode")
-    {"yolov5": _b_yolov5, "yolox": _b_yolox, "ultralytics": _b_ultralytics, "end2end": _b_end2end}[family](r, module)
+    {"yolov5": _b_yolov5, "yolox": _b_yolox, "ultralytics": _b_ultralytics, "szurp_v8": _b_szurp_v8,
+     "end2end": _b_end2end, "yolo26_e2e": _b_yolo26}[family](r, module)
     return r.done()
 
 
@@ -288,6 +334,28 @@ def _b_ultralytics(r, m):
     r.run("decode(): reborn_yolov8 (2 classes, color only)", t_yolov8)
 
 
+def _b_szurp_v8(r, m):
+    tf = Transform(0.5, 0, 120, 480, 640)
+    out = np.zeros((1, 21, 6300), np.float32)
+    kpts = np.array([[300, 200], [300, 240], [400, 242], [400, 198]], np.float32)  # TL, BL, BR, TR
+    for j, score, shift in [(1000, 0.8, 0), (1001, 0.7, 2), (2000, 0.4, 50)]:
+        out[0, 0:4, j] = [0.05, 0.9, 0.02, 0.0]   # red
+        out[0, 4 + 7, j] = score                  # class 7: base (bottom), a big plate
+        out[0, 13:21, j] = (kpts + shift).reshape(-1)
+
+    def t_decode():
+        dets = m.decode([out], tf)
+        assert len(dets) == 1, f"expected 1 plate (one duplicate, one below the 0.5 threshold), got {len(dets)}"
+        d = dets[0]
+        assert math.isclose(d["score"], 0.8, abs_tol=1e-3), "the score is the best of the 9 class scores"
+        assert (d["color"], d["number"], d["size"]) == ("red", "base", "big"), \
+            f"columns 0-3 are colors (red wins), class 7 is the base's big bottom plate: got {d['color']} {d['number']} {d['size']}"
+        want = (kpts[[0, 3, 2, 1]] - [0, 120]) / 0.5
+        assert _close(_corners(dets), want, 1e-2), f"corners (columns 13-20) should be TL, TR, BR, BL in frame pixels: {want.tolist()}"
+
+    r.run("decode(): colors first, class score, corners last, NMS", t_decode)
+
+
 def _b_end2end(r, m):
     tf = Transform(0.5, 0, 52, 576, 768)
     out = np.zeros((1, 30, 18), np.float32)
@@ -312,6 +380,30 @@ def _b_end2end(r, m):
         assert _close(_corners(dets), want, 1e-2), f"corners should be TL, TR, BR, BL in frame pixels: {want.tolist()}"
 
     r.run("decode(): threshold, class + color, corner order (no NMS needed)", t_decode)
+
+
+def _b_yolo26(r, m):
+    tf = Transform(0.5, 0, 80, 640, 640)
+    out = np.zeros((1, 300, 18), np.float32)
+    kpts = np.array([[100, 152], [100, 172], [160, 174], [160, 150]], np.float32)  # TL, BL, BR, TR
+    out[0, 0, :6] = [100, 150, 160, 174, 0.92, 5.0]  # class 5: blue_1
+    out[0, 0, 6:18] = np.hstack([kpts, np.full((4, 1), 0.99)]).reshape(-1)  # x, y, visible
+    out[0, 1, :6] = [300, 200, 340, 220, 0.2, 2.0]   # below the threshold
+    out[0, 2, :6] = [400, 200, 440, 220, 0.7, 3.0]   # class 3: red_3
+    out[0, 2, 6:18] = [400, 200, 0.9, 400, 220, 0.9, 440, 220, 0.9, 440, 200, 0.9]
+
+    def t_decode():
+        dets = m.decode([out], tf)
+        assert len(dets) == 2, f"expected 2 plates (one row is below the threshold), got {len(dets)}"
+        a, b = dets
+        assert a["score"] >= b["score"], "sort the plates by score, best first"
+        assert (a["color"], a["number"]) == ("blue", "1") and (b["color"], b["number"]) == ("red", "3"), \
+            f"rows 0 and 2 are classes 5 (blue_1) and 3 (red_3), got {a['color']} {a['number']} and {b['color']} {b['number']}"
+        want = (kpts[[0, 3, 2, 1]] - [0, 80]) / 0.5
+        assert _close(_corners(dets), want, 1e-2), \
+            f"corners are (x, y, visible) triples: keep x and y, order TL, TR, BR, BL, frame pixels: {want.tolist()}"
+
+    r.run("decode(): score, class, (x, y, visible) corners (no NMS needed)", t_decode)
 
 
 # ============================================================================ m1, m6

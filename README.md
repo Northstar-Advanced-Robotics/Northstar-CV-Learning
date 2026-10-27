@@ -347,7 +347,7 @@ The robot's own cameras are already calibrated: ask a CV lead for their config f
 
 ## Going further
 
-- **Model zoo:** [`model_zoo/`](model_zoo/README.md) has 8 armor detectors from 5 teams, in 4 file formats (the
+- **Model zoo:** [`model_zoo/`](model_zoo/README.md) has 10 armor detectors from 5 teams plus our own, in 4 file formats (the
   model you just used is one of them). Learn how they differ, get all of them running, and measure which one we
   should put on the robot.
 - **INT8:** build an INT8 engine ([BASICS 10](BASICS.md#10-model-files-and-the-programs-that-run-them)). What does

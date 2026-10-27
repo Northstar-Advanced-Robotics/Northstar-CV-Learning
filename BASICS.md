@@ -275,7 +275,7 @@ their own cell** rather than in pixels. Then: `pixel = (value + cell number) × 
 the stride-16 grid says x = -1.0, that's (−1 + 5) × 16 = 64 pixels.
 
 **Keypoints** are specific points a model finds, here the 4 plate corners. "Pose" models are models that find
-keypoints.
+keypoints. Some give a third number per keypoint besides x and y: how sure they are that the point is visible.
 
 ---
 
