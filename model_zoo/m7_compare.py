@@ -38,6 +38,7 @@ from cameras import add_source_args, open_camera, source_from_args  # noqa: E402
 from common import OUT_DIR, detect, draw, family_module, load_runners, read_frames  # noqa: E402
 
 TILE_W = 480
+LIVE_W, LIVE_H = 1600, 900  # the --live window fits in this (a 1080p screen, leaving room for the title bar)
 
 
 def zoom_box(frame, all_dets, aspect=0.75):
@@ -147,6 +148,18 @@ def grid(tiles, cols=4):
     return np.vstack([np.hstack(tiles[i:i + cols]) for i in range(0, len(tiles), cols)])
 
 
+def live_layout(n, frame_w, frame_h):
+    """How many columns, and how wide each tile, so n tiles are as big as possible while the whole
+    grid fits in LIVE_W x LIVE_H. 11 models from a 4:3 camera: 4 columns x 3 rows of 400 px."""
+    best_cols, best_w = 1, 0
+    for cols in range(1, n + 1):
+        rows = -(-n // cols)  # n / cols, rounded up
+        tile_w = min(LIVE_W // cols, int(LIVE_H / rows * frame_w / frame_h))
+        if tile_w > best_w:
+            best_cols, best_w = cols, tile_w
+    return best_cols, best_w
+
+
 def load(args, first_frame):
     """Every model that loads here, warmed up on first_frame: [(model, runner, family module)]."""
     runners, seen = [], set()
@@ -201,9 +214,8 @@ def live(args, source, settings):
         if frame is None:
             raise SystemExit("the camera gave no frame")
         runners = load(args, frame)
-        cols = min(len(runners), 3)
-        tile_w = max(360, 1440 // cols)
-        writer, paused, shown, t0 = None, False, 0, time.perf_counter()
+        cols, tile_w = live_layout(len(runners), frame.shape[1], frame.shape[0])
+        writer, paused, shown, window_open, t0 = None, False, 0, False, time.perf_counter()
         while args.seconds is None or time.perf_counter() - t0 < args.seconds:
             if not paused:
                 frame = cam.read()
@@ -227,6 +239,10 @@ def live(args, source, settings):
                 if shown % 20 == 0:
                     print(f"{shown} frames, {shown / (time.perf_counter() - t0):.1f} FPS for all models together", flush=True)
                 continue
+            if not window_open:  # resizable, in case the grid still doesn't fit your screen
+                cv2.namedWindow("models, live", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+                cv2.resizeWindow("models, live", view.shape[1], view.shape[0])
+                window_open = True
             cv2.imshow("models, live", view)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
